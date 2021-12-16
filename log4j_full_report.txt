@@ -1,0 +1,60 @@
+---
+- name: "Check log4j vulnerability - CVE-2021-44228"
+  hosts: servers
+  become: yes
+  become_method: su
+  remote_user: user
+  gather_facts: yes
+  
+  vars:
+       script_path: /tmp/log4j-checker.sh
+       ansible_ssh_pipelining: no
+  tasks:
+
+    - name: Upload script log4j-checker.sh
+      copy:
+        src: ../log4j-checker.sh
+        dest: "{{ script_path }}"
+        mode: 00755
+      changed_when: false
+
+    - name: Run log4j-checker.sh
+      command: "sh {{ script_path }}"
+      register: log4j_checker_results
+      changed_when: "'FOUND' in log4j_checker_results.stdout"
+
+    - name: List log4j vulnerable libs
+      command: "cat /tmp/log4j_vulnerable_libs.txt"
+      register: log4j_vulnerable_libs
+
+    - name: Detect RCE attempts
+      command: "cat /tmp/log4j_logs_attack.txt"
+      register: log4j_logs_rce_attack
+   
+    - name: Print vulnerable JndiLookup.class libs
+      debug:
+          msg: "{{log4j_vulnerable_libs.stdout_lines}}"
+      when: log4j_checker_results.changed
+    
+    - name: Print Log4j RCE attempts
+      debug:
+          msg: "{{log4j_logs_rce_attack.stdout_lines}}"
+      when: log4j_checker_results.changed
+    
+    - name: Retrieve log4j-checker.sh full report
+      fetch:
+        src: /tmp/log4j_full_report.txt
+        dest: log4j_checker/runs
+
+    - name: Remove log4j-checker.sh
+      file:
+        dest: "{{ item }}"
+        state: absent
+      with_items:
+              - /tmp/log4j-check.sh
+              - /tmp/log4j_libs.txt
+              - /tmp/log4j_processes.txt
+              - /tmp/log4j_logs.txt
+              - /tmp/log4j_logs_attack.txt
+              - /tmp/log4j_vulnerable_libs.txt
+              - /tmp/log4j_full_report.txt
